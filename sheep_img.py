@@ -6,7 +6,7 @@ from skimage.feature import hog
 from sklearn.model_selection import train_test_split
 
 # Data Preparation
-data_directory = 'D:/TIF/Semester 5/Project Peternakan Kambing/sheep/images'
+data_directory = "D:/TIF/Semester 5/Project Peternakan Kambing/sheep/images/"
 
 # Create empty lists to store features and labels
 X = []  # Features
@@ -17,14 +17,14 @@ for filename in os.listdir(data_directory):
     if filename.endswith(".jpg"):
         image_path = os.path.join(data_directory, filename)
         img = cv2.imread(image_path)
-        
+
         # Preprocess the image (resize, convert to grayscale)
         img = cv2.resize(img, (64, 64))
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
+
         # Extract features (HOG, you can use other methods as well)
         features = hog(gray_img, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
-        
+
         # Append features and labels
         X.append(features)
         if "sheep" in filename:
@@ -39,40 +39,19 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 clf = svm.SVC(kernel='linear')
 clf.fit(X_train, y_train)
 
-
-# Function to identify sheep in a frame
+# Function to identify sheep in a frame (image)
 def identify_sheep(frame):
     # Preprocess the frame (resize, convert to grayscale)
     frame = cv2.resize(frame, (64, 64))
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    print(gray_frame)
-    
+
     # Extract features (HOG, you can use other methods as well)
     features = hog(gray_frame, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
-    
+
     # Predict whether the frame contains a sheep or not
     prediction = clf.predict([features])
-    
-    if prediction == 1:
-        # Display a message or label on the image
-        cv2.putText(frame, "Sheep", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        return True
-    else:
-        return False
 
-# Weight Estimation Phase with Regression
-def estimate_weight(length_mm, breadth_mm):
-    # Define regression equation parameters
-    c = 0.064443
-    d = 0.010059
-
-    # Calculate the weight
-    weight = c * breadth_mm + d * length_mm
-
-    return weight
-
-# Pre-processing Phase
+    return prediction  # Return the prediction (1 for sheep, 0 for not sheep)
 def preprocess_image(frame):
     # Crop out legs and neck (Update coordinates as needed)
     cropped_frame = frame[50:400, 50:450]  # Example coordinates
@@ -89,8 +68,6 @@ def preprocess_image(frame):
     _, binary_image = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
 
     return binary_image
-
-# Segmentation Phase (K-Means Clustering)
 def kmeans_segmentation(binary_image):
     # Define K-Means parameters
     k = 2  # Number of clusters (You may need to adjust this)
@@ -113,56 +90,52 @@ def kmeans_segmentation(binary_image):
     segmented_image = labels.reshape(binary_image.shape)
 
     return segmented_image
+def estimate_weight(length_mm, breadth_mm):
+    # Define regression equation parameters
+    c = 0.064443
+    d = 0.010059
 
-# Open the camera
-frame = cv2.imread('D:/TIF/Semester 5/Project Peternakan Kambing/sheep/g_12.jpg')  # Ganti 'path_to_image.jpg' dengan jalur file gambar yang ingin Anda proses
-# cap = cv2.VideoCapture(0)  Adjust camera index as needed
+    # Calculate the weight
+    weight = c * breadth_mm + d * length_mm
 
-is_sheep = identify_sheep(frame)
+    return weight
+# Load the static image "kambing1.jpg"
+image_path = os.path.join(data_directory, "kambing1.jpg")
+kambing_image = cv2.imread(image_path)
 
+# Identify sheep in the image
+is_sheep = identify_sheep(kambing_image)
 
-while True:
-    # ret, frame = cap.read()
-    
-    # Identify sheep in the frame
-    # is_sheep = identify_sheep(frame)
-    
-    if is_sheep:
-        # Pre-processing
-        preprocessed_frame = preprocess_image(frame)
+if is_sheep == 1:
+    # Pre-processing
+    preprocessed_frame = preprocess_image(kambing_image)
 
-        # Segmentation
-        segmented_frame = kmeans_segmentation(preprocessed_frame)
+    # Segmentation
+    segmented_frame = kmeans_segmentation(preprocessed_frame)
 
-        # Convert segmented_frame to CV_8UC1 data type
-        segmented_frame = np.uint8(segmented_frame)
+    # Convert segmented_frame to CV_8UC1 data type
+    segmented_frame = np.uint8(segmented_frame)
 
-        # Find contours of connected components
-        contours, _ = cv2.findContours(segmented_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if contours:
-            # Find the largest contour (assuming it's the sheep)
-            largest_contour = max(contours, key=cv2.contourArea)
+    # Find contours of connected components
+    contours, _ = cv2.findContours(segmented_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            # Calculate the dimensions (length and breadth) of the sheep
-            x, y, w, h = cv2.boundingRect(largest_contour)
-            length_mm = w
-            breadth_mm = h
+    if contours:
+        # Find the largest contour (assuming it's the sheep)
+        largest_contour = max(contours, key=cv2.contourArea)
 
-            # Estimate weight
-            estimated_weight = estimate_weight(length_mm, breadth_mm)
-            
-            # Display a message or draw a bounding box around the sheep
-            cv2.putText(frame, "Sheep", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.putText(frame, f"Weight: {estimated_weight:.2f} kg", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    else: print("wkwkwkwk")   
+        # Calculate the dimensions (length and breadth) of the sheep
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        length_mm = w
+        breadth_mm = h
 
-    cv2.imshow('Sheep Identification', frame)
- 
-    # Exit on 'q' key press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        # Estimate weight
+        estimated_weight = estimate_weight(length_mm, breadth_mm)
 
-# Release the camera and close OpenCV windows
-# cap.release()
+        # Display a message or draw a bounding box around the sheep
+        cv2.putText(kambing_image, "Sheep", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(kambing_image, f"Weight: {estimated_weight:.2f} kg", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+# Show the result image
+cv2.imshow('Sheep Identification', kambing_image)
+cv2.waitKey(0)
 cv2.destroyAllWindows()
